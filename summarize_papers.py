@@ -3,6 +3,7 @@ import os
 import re
 import smtplib
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -58,7 +59,7 @@ Be direct and concrete. Avoid filler phrases like "the authors propose" — just
 def fetch_recent_papers(query: str, max_results: int, lookback_hours: int) -> list[dict]:
     url = (
         f"http://export.arxiv.org/api/query"
-        f"?search_query={feedparser._urllib.parse.quote(query)}"
+        f"?search_query={quote(query)}"
         f"&sortBy=submittedDate&sortOrder=descending"
         f"&max_results={max_results}"
     )
