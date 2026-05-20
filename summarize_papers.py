@@ -65,6 +65,7 @@ def fetch_recent_papers(query: str, max_results: int, lookback_hours: int) -> li
     )
     print(f"Query URL: {url}")
     feed = feedparser.parse(url)
+    print(f"ArXiv returned {len(feed.entries)} total entries")
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
     papers = []
