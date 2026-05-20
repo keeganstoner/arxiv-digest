@@ -33,7 +33,7 @@ ARXIV_QUERY = (
      
 
 MAX_RESULTS = 50        # papers to fetch per run (ArXiv returns newest first)
-LOOKBACK_HOURS = 168    # 7 days — temporarily widened to test query
+LOOKBACK_HOURS = 26     # include papers published within this window
 TOP_N = 5               # max papers to summarize and email
 
 SUMMARY_PROMPT = """You are summarizing an academic paper for a researcher who wants a quick but substantive overview.
