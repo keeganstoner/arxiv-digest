@@ -2,6 +2,7 @@ import json
 import os
 import re
 import smtplib
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from email.mime.multipart import MIMEMultipart
@@ -64,8 +65,18 @@ def fetch_recent_papers(query: str, max_results: int, lookback_hours: int) -> li
         f"&sortBy=submittedDate&sortOrder=descending"
         f"&max_results={max_results}"
     )
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
+    headers = {"User-Agent": "arxiv-digest/1.0 (keeganstoner@gmail.com)"}
+    for attempt in range(3):
+        response = requests.get(url, timeout=30, headers=headers)
+        if response.status_code == 429:
+            wait = 30 * (attempt + 1)
+            print(f"Rate limited by ArXiv, retrying in {wait}s...")
+            time.sleep(wait)
+            continue
+        response.raise_for_status()
+        break
+    else:
+        raise RuntimeError("ArXiv rate limit persisted after retries")
     feed = feedparser.parse(response.content)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
