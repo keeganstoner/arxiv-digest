@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 
 import anthropic
 import feedparser
+import requests
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -63,7 +64,9 @@ def fetch_recent_papers(query: str, max_results: int, lookback_hours: int) -> li
         f"&sortBy=submittedDate&sortOrder=descending"
         f"&max_results={max_results}"
     )
-    feed = feedparser.parse(url)
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    feed = feedparser.parse(response.content)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
     papers = []
