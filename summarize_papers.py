@@ -59,10 +59,11 @@ Be direct and concrete. Avoid filler phrases like "the authors propose" — just
 def fetch_recent_papers(query: str, max_results: int, lookback_hours: int) -> list[dict]:
     url = (
         f"http://export.arxiv.org/api/query"
-        f"?search_query={quote(query)}"
+        f"?search_query={quote(query, safe=':\"()')}"
         f"&sortBy=submittedDate&sortOrder=descending"
         f"&max_results={max_results}"
     )
+    print(f"Query URL: {url}")
     feed = feedparser.parse(url)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
 
