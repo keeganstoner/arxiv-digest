@@ -2,9 +2,7 @@ import json
 import os
 import re
 import smtplib
-import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -14,28 +12,25 @@ import requests
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-# ArXiv search query. Uses the ArXiv query syntax:
-#   all:TERM     searches all fields (title, abstract, authors)
-#   ti:TERM      title only
-#   abs:TERM     abstract only
-#   cat:CATEGORY category (e.g. cs.AI, cs.LG, q-bio.NC)
-#   AND / OR / ANDNOT for boolean logic
-ARXIV_QUERY = (                                           
-    "(cat:cs.CR OR cat:cs.NI) AND ("
-    'abs:"LTE security" OR abs:"5G security" OR abs:"5G vulnerability" OR '                                                  
-    'abs:"baseband vulnerability" OR abs:"baseband exploit" OR '                                                             
-    'abs:"IMSI catcher" OR abs:"IMSI-catcher" OR abs:"false base station" OR '                                               
-    'abs:"fake base station" OR abs:"rogue base station" OR abs:"cell site simulator" OR '                                   
-    'abs:"traffic fingerprinting" OR abs:"website fingerprinting" OR '                                                       
-    'abs:"censorship circumvention" OR abs:"censorship evasion" OR '                                                         
-    'abs:"great firewall" OR abs:"domain fronting" OR abs:"pluggable transport" OR '                                         
-    'abs:"protocol obfuscation"'                                                                                             
-    ")"                                                                                                                      
-)                                                                                                                            
-     
+# ArXiv RSS feeds to monitor (one per category)
+RSS_FEEDS = [
+    "https://rss.arxiv.org/rss/cs.CR",  # Cryptography and Security
+    "https://rss.arxiv.org/rss/cs.NI",  # Networking and Internet Architecture
+]
 
-MAX_RESULTS = 50        # papers to fetch per run (ArXiv returns newest first)
-LOOKBACK_HOURS = 26     # include papers published within this window
+# Keywords to match against title + abstract (case-insensitive)
+KEYWORDS = [
+    "lte security", "5g security", "5g vulnerability",
+    "baseband vulnerability", "baseband exploit",
+    "imsi catcher", "imsi-catcher", "false base station",
+    "fake base station", "rogue base station", "cell site simulator",
+    "traffic fingerprinting", "website fingerprinting",
+    "censorship circumvention", "censorship evasion",
+    "great firewall", "domain fronting", "pluggable transport",
+    "protocol obfuscation",
+]
+
+LOOKBACK_HOURS = 36     # safety net for weekend gaps in ArXiv announcements
 TOP_N = 5               # max papers to summarize and email
 
 SUMMARY_PROMPT = """You are summarizing an academic paper for a researcher who wants a quick but substantive overview.
@@ -58,43 +53,52 @@ Be direct and concrete. Avoid filler phrases like "the authors propose" — just
 
 # ── ArXiv fetching ────────────────────────────────────────────────────────────
 
-def fetch_recent_papers(query: str, max_results: int, lookback_hours: int) -> list[dict]:
-    url = (
-        f"http://export.arxiv.org/api/query"
-        f"?search_query={quote(query, safe=':\"()')}"
-        f"&sortBy=submittedDate&sortOrder=descending"
-        f"&max_results={max_results}"
-    )
+def fetch_recent_papers(lookback_hours: int) -> list[dict]:
     headers = {"User-Agent": "arxiv-digest/1.0 (keeganstoner@gmail.com)"}
-    for attempt in range(3):
-        response = requests.get(url, timeout=30, headers=headers)
-        if response.status_code == 429:
-            wait = 30 * (attempt + 1)
-            print(f"Rate limited by ArXiv, retrying in {wait}s...")
-            time.sleep(wait)
-            continue
-        response.raise_for_status()
-        break
-    else:
-        raise RuntimeError("ArXiv rate limit persisted after retries")
-    feed = feedparser.parse(response.content)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
-
+    seen_ids = set()
     papers = []
-    for entry in feed.entries:
-        published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-        if published < cutoff:
-            continue
-        arxiv_id = entry.id.split("/abs/")[-1]
-        papers.append({
-            "title": entry.title.replace("\n", " ").strip(),
-            "authors": ", ".join(a.name for a in entry.authors),
-            "published": published.strftime("%Y-%m-%d %H:%M UTC"),
-            "abstract": entry.summary.replace("\n", " ").strip(),
-            "arxiv_id": arxiv_id,
-            "abs_url": f"https://arxiv.org/abs/{arxiv_id}",
-            "pdf_url": f"https://arxiv.org/pdf/{arxiv_id}",
-        })
+
+    for feed_url in RSS_FEEDS:
+        print(f"  Fetching {feed_url}...")
+        response = requests.get(feed_url, timeout=30, headers=headers)
+        response.raise_for_status()
+        feed = feedparser.parse(response.content)
+
+        for entry in feed.entries:
+            arxiv_id = entry.link.split("/abs/")[-1]
+            if arxiv_id in seen_ids:
+                continue
+
+            title = entry.title.replace("\n", " ").strip()
+            abstract = re.sub(r"<[^>]+>", "", entry.summary).replace("\n", " ").strip()
+
+            if not any(kw in (title + " " + abstract).lower() for kw in KEYWORDS):
+                continue
+
+            if hasattr(entry, "published_parsed") and entry.published_parsed:
+                published = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                if published < cutoff:
+                    continue
+                published_str = published.strftime("%Y-%m-%d %H:%M UTC")
+            else:
+                published_str = "Unknown"
+
+            if hasattr(entry, "authors"):
+                authors = ", ".join(a.name for a in entry.authors)
+            else:
+                authors = getattr(entry, "author", "Unknown")
+
+            seen_ids.add(arxiv_id)
+            papers.append({
+                "title": title,
+                "authors": authors,
+                "published": published_str,
+                "abstract": abstract,
+                "arxiv_id": arxiv_id,
+                "abs_url": f"https://arxiv.org/abs/{arxiv_id}",
+                "pdf_url": f"https://arxiv.org/pdf/{arxiv_id}",
+            })
 
     return papers
 
@@ -233,8 +237,8 @@ def main() -> None:
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     print(f"Fetching papers for {date_str}...")
 
-    papers = fetch_recent_papers(ARXIV_QUERY, MAX_RESULTS, LOOKBACK_HOURS)
-    print(f"Found {len(papers)} papers in the last {LOOKBACK_HOURS}h")
+    papers = fetch_recent_papers(LOOKBACK_HOURS)
+    print(f"Found {len(papers)} matching papers in the last {LOOKBACK_HOURS}h")
 
     if not papers:
         print("Nothing to summarize; skipping email.")
