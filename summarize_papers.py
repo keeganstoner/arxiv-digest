@@ -1,6 +1,7 @@
+import json
 import os
+import re
 import smtplib
-import textwrap
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -16,13 +17,23 @@ import feedparser
 #   abs:TERM     abstract only
 #   cat:CATEGORY category (e.g. cs.AI, cs.LG, q-bio.NC)
 #   AND / OR / ANDNOT for boolean logic
-ARXIV_QUERY = (
-    "all:large language model OR all:LLM OR all:transformer"
-    " OR all:diffusion model OR all:reinforcement learning from human feedback"
-)
+ARXIV_QUERY = (                                           
+    "(cat:cs.CR OR cat:cs.NI) AND ("
+    'abs:"LTE security" OR abs:"5G security" OR abs:"5G vulnerability" OR '                                                  
+    'abs:"baseband vulnerability" OR abs:"baseband exploit" OR '                                                             
+    'abs:"IMSI catcher" OR abs:"IMSI-catcher" OR abs:"false base station" OR '                                               
+    'abs:"fake base station" OR abs:"rogue base station" OR abs:"cell site simulator" OR '                                   
+    'abs:"traffic fingerprinting" OR abs:"website fingerprinting" OR '                                                       
+    'abs:"censorship circumvention" OR abs:"censorship evasion" OR '                                                         
+    'abs:"great firewall" OR abs:"domain fronting" OR abs:"pluggable transport" OR '                                         
+    'abs:"protocol obfuscation"'                                                                                             
+    ")"                                                                                                                      
+)                                                                                                                            
+     
 
 MAX_RESULTS = 50        # papers to fetch per run (ArXiv returns newest first)
 LOOKBACK_HOURS = 26     # include papers published within this window
+TOP_N = 5               # max papers to summarize and email
 
 SUMMARY_PROMPT = """You are summarizing an academic paper for a researcher who wants a quick but substantive overview.
 
@@ -72,6 +83,46 @@ def fetch_recent_papers(query: str, max_results: int, lookback_hours: int) -> li
 
     return papers
 
+# ── Ranking ───────────────────────────────────────────────────────────────────
+
+RANKING_PROMPT = """You are helping filter academic papers for a security researcher. Their core interests are:
+1. LTE/5G protocol vulnerabilities and cellular network security
+2. Fake base stations, IMSI catchers, and cell site simulator detection/defense
+3. IP-level traffic fingerprinting and obfuscation techniques
+4. Censorship evasion and circumvention tools and protocols
+
+Below are {n} papers that passed a keyword filter. Select the {top_n} most directly relevant to these interests. Prefer papers that are central to one of these topics over papers that merely mention them in passing.
+
+Reply with ONLY a JSON array of the selected paper indices (0-based), ordered from most to least relevant. Example: [2, 0, 4, 1, 3]
+
+Papers:
+{paper_list}"""
+
+def select_top_papers(client: anthropic.Anthropic, papers: list[dict], top_n: int) -> list[dict]:
+    if len(papers) <= top_n:
+        return papers
+
+    print(f"  Ranking {len(papers)} papers to select top {top_n}...")
+    paper_list = "\n\n".join(
+        f"[{i}] {p['title']}\n{p['abstract'][:400]}"
+        for i, p in enumerate(papers)
+    )
+    prompt = RANKING_PROMPT.format(n=len(papers), top_n=top_n, paper_list=paper_list)
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=100,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = message.content[0].text.strip()
+    match = re.search(r"\[[\d,\s]+\]", raw)
+    if not match:
+        print(f"  Warning: could not parse ranking response '{raw}', using first {top_n}")
+        return papers[:top_n]
+    indices = json.loads(match.group())
+    valid = [i for i in indices if 0 <= i < len(papers)][:top_n]
+    return [papers[i] for i in valid]
+
 # ── Summarization ─────────────────────────────────────────────────────────────
 
 def summarize_paper(client: anthropic.Anthropic, paper: dict) -> str:
@@ -88,8 +139,6 @@ def summarize_paper(client: anthropic.Anthropic, paper: dict) -> str:
 def build_email_html(papers_with_summaries: list[tuple[dict, str]], date_str: str) -> str:
     sections = []
     for paper, summary in papers_with_summaries:
-        # Convert markdown bold (**text**) to <strong> tags
-        import re
         html_summary = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", summary)
         html_summary = html_summary.replace("\n", "<br>")
 
@@ -177,15 +226,18 @@ def main() -> None:
         return
 
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    selected = select_top_papers(client, papers, TOP_N)
+    print(f"Summarizing {len(selected)} papers...")
+
     papers_with_summaries = []
-    for i, paper in enumerate(papers, 1):
-        print(f"  [{i}/{len(papers)}] {paper['title'][:70]}...")
+    for i, paper in enumerate(selected, 1):
+        print(f"  [{i}/{len(selected)}] {paper['title'][:70]}...")
         summary = summarize_paper(client, paper)
         papers_with_summaries.append((paper, summary))
 
     html = build_email_html(papers_with_summaries, date_str)
     plain = build_email_plaintext(papers_with_summaries, date_str)
-    subject = f"ArXiv Digest {date_str} ({len(papers)} papers)"
+    subject = f"ArXiv Digest {date_str} ({len(selected)} papers)"
 
     print("Sending email...")
     send_email(subject, html, plain)
