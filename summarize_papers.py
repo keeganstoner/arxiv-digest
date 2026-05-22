@@ -37,7 +37,7 @@ TOP_N = 5               # max papers to summarize and email
 SONNET_PRICE  = {"input": 3.00,  "output": 15.00}
 HAIKU_PRICE   = {"input": 0.80,  "output": 4.00}
 
-SUMMARY_PROMPT = """You are summarizing an academic paper for a researcher who wants a quick but substantive overview.
+SUMMARY_PROMPT = """You are explaining an academic paper to a security researcher who is smart and technical but may not be deep in this specific subfield.
 
 Title: {title}
 Authors: {authors}
@@ -47,13 +47,15 @@ ArXiv ID: {arxiv_id}
 Abstract:
 {abstract}
 
-Write a summary with these sections:
-**What they did** (1-2 sentences): The core contribution or finding.
-**Why it matters** (1 sentence): The significance or potential impact.
-**Key idea** (2-3 sentences): The technical approach or main insight.
-**Limitations / caveats** (1 sentence): What the authors acknowledge as limitations, or what seems missing.
+Write four sections with these headers (use **Header** markdown):
 
-Be direct and concrete. Avoid filler phrases like "the authors propose" — just state what was done."""
+**Background**: 2-3 sentences of context a non-specialist would need. What is the broader problem space? What are the key techniques or concepts this paper builds on? Write this like the first paragraph of a good blog post — assume the reader is technical but hasn't read papers in this area.
+
+**What they did**: 3-5 sentences. Explain the actual contribution directly and concretely, as if telling a colleague over coffee. Don't use phrases like "the authors propose" or "this paper presents" — just say what it is and what it does. If it's a tool or system, say what the tool does. If it's an attack, say how the attack works.
+
+**Why it matters**: 2-3 sentences on the real-world significance. Be specific — who is affected, what changes if this work is adopted or if attackers use it?
+
+**Limitations**: 1-2 sentences on what's missing or what the paper doesn't address."""
 
 # ── ArXiv fetching ────────────────────────────────────────────────────────────
 
@@ -153,7 +155,7 @@ def summarize_paper(client: anthropic.Anthropic, paper: dict) -> tuple[str, dict
     prompt = SUMMARY_PROMPT.format(**paper)
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=600,
+        max_tokens=1000,
         messages=[{"role": "user", "content": prompt}],
     )
     usage = {"input": message.usage.input_tokens, "output": message.usage.output_tokens}
@@ -179,7 +181,11 @@ def build_email_html(papers_with_summaries: list[tuple[dict, str]], date_str: st
             &nbsp;·&nbsp;
             <a href="{paper['pdf_url']}">PDF</a>
           </p>
-          <p style="margin:0; font-size:14px; line-height:1.6;">{html_summary}</p>
+          <p style="margin:0 0 12px; font-size:14px; line-height:1.6;">{html_summary}</p>
+          <details style="margin-top:8px;">
+            <summary style="cursor:pointer; color:#555; font-size:12px;">Abstract</summary>
+            <p style="margin:8px 0 0; font-size:13px; line-height:1.5; color:#444;">{paper['abstract']}</p>
+          </details>
         </div>
         """)
 
@@ -212,6 +218,9 @@ def build_email_plaintext(papers_with_summaries: list[tuple[dict, str]], date_st
             f"PDF:      {paper['pdf_url']}",
             "",
             summary,
+            "",
+            "Abstract:",
+            paper["abstract"],
             "-" * 60,
         ]
     if not papers_with_summaries:
