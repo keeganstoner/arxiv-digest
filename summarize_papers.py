@@ -12,26 +12,16 @@ import requests
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-# ArXiv RSS feeds to monitor (one per category)
-RSS_FEEDS = [
-    "https://rss.arxiv.org/rss/cs.CR",  # Cryptography and Security
-    "https://rss.arxiv.org/rss/cs.NI",  # Networking and Internet Architecture
-]
+_config_path = os.environ.get("CONFIG_FILE", "configs/security.json")
+with open(_config_path) as _f:
+    _config = json.load(_f)
 
-# Keywords to match against title + abstract (case-insensitive)
-KEYWORDS = [
-    "lte security", "5g security", "5g vulnerability",
-    "baseband vulnerability", "baseband exploit",
-    "imsi catcher", "imsi-catcher", "false base station",
-    "fake base station", "rogue base station", "cell site simulator",
-    "traffic fingerprinting", "website fingerprinting",
-    "censorship circumvention", "censorship evasion",
-    "great firewall", "domain fronting", "pluggable transport",
-    "protocol obfuscation",
-]
+DIGEST_NAME   = _config["name"]
+RSS_FEEDS     = _config["feeds"]
+KEYWORDS      = _config["keywords"]
+TOP_N         = _config.get("top_n", 5)
 
 LOOKBACK_HOURS = 36     # safety net for weekend gaps in ArXiv announcements
-TOP_N = 5               # max papers to summarize and email
 
 # Pricing per million tokens (verify at console.anthropic.com/settings/billing)
 SONNET_PRICE  = {"input": 3.00,  "output": 15.00}
@@ -194,7 +184,7 @@ def build_email_html(papers_with_summaries: list[tuple[dict, str]], date_str: st
     return f"""
     <html><body style="font-family:Georgia,serif; max-width:700px; margin:auto; padding:24px; color:#222;">
       <h1 style="font-size:20px; border-bottom:1px solid #ddd; padding-bottom:8px;">
-        ArXiv Digest — {date_str}
+        ArXiv Digest: {DIGEST_NAME} — {date_str}
       </h1>
       <p style="color:#555; font-size:13px;">{len(papers_with_summaries)} papers</p>
       {body}
@@ -207,7 +197,7 @@ def build_email_html(papers_with_summaries: list[tuple[dict, str]], date_str: st
     """
 
 def build_email_plaintext(papers_with_summaries: list[tuple[dict, str]], date_str: str, cost_str: str = "") -> str:
-    lines = [f"ArXiv Digest — {date_str}", f"{len(papers_with_summaries)} papers", "=" * 60]
+    lines = [f"ArXiv Digest: {DIGEST_NAME} — {date_str}", f"{len(papers_with_summaries)} papers", "=" * 60]
     for paper, summary in papers_with_summaries:
         lines += [
             "",
@@ -283,7 +273,7 @@ def main() -> None:
 
     html = build_email_html(papers_with_summaries, date_str, cost_str)
     plain = build_email_plaintext(papers_with_summaries, date_str, cost_str)
-    subject = f"ArXiv Digest {date_str} ({len(selected)} papers)"
+    subject = f"ArXiv Digest: {DIGEST_NAME} {date_str} ({len(selected)} papers)"
 
     print("Sending email...")
     send_email(subject, html, plain)

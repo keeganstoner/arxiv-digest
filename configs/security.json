@@ -1,0 +1,18 @@
+{
+  "name": "Security",
+  "feeds": [
+    "https://rss.arxiv.org/rss/cs.CR",
+    "https://rss.arxiv.org/rss/cs.NI"
+  ],
+  "keywords": [
+    "lte security", "5g security", "5g vulnerability",
+    "baseband vulnerability", "baseband exploit",
+    "imsi catcher", "imsi-catcher", "false base station",
+    "fake base station", "rogue base station", "cell site simulator",
+    "traffic fingerprinting", "website fingerprinting",
+    "censorship circumvention", "censorship evasion",
+    "great firewall", "domain fronting", "pluggable transport",
+    "protocol obfuscation"
+  ],
+  "top_n": 5
+}
