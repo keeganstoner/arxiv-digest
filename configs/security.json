@@ -5,14 +5,13 @@
     "https://rss.arxiv.org/rss/cs.NI"
   ],
   "keywords": [
-    "lte security", "5g security", "5g vulnerability",
-    "baseband vulnerability", "baseband exploit",
-    "imsi catcher", "imsi-catcher", "false base station",
-    "fake base station", "rogue base station", "cell site simulator",
-    "traffic fingerprinting", "website fingerprinting",
-    "censorship circumvention", "censorship evasion",
-    "great firewall", "domain fronting", "pluggable transport",
-    "protocol obfuscation"
+    "lte", "baseband", "imsi", "stingray", "femtocell", "diameter",
+    "cell site simulator", "false base station", "fake base station", "rogue base station",
+    "5g security", "5g vulnerability",
+    "fingerprinting",
+    "traffic obfuscation", "protocol obfuscation", "dpi", "dpi evasion",
+    "censorship circumvention", "censorship evasion", "internet censorship",
+    "great firewall", "domain fronting", "pluggable transport", "shadowsocks", "tor"
   ],
   "top_n": 5
 }
