@@ -37,15 +37,7 @@ ArXiv ID: {arxiv_id}
 Abstract:
 {abstract}
 
-Write four sections with these headers (use **Header** markdown):
-
-**Background**: 2-3 sentences of context a non-specialist would need. What is the broader problem space? What are the key techniques or concepts this paper builds on? Write this like the first paragraph of a good blog post — assume the reader is technical but hasn't read papers in this area.
-
-**What they did**: 3-5 sentences. Explain the actual contribution directly and concretely, as if telling a colleague over coffee. Don't use phrases like "the authors propose" or "this paper presents" — just say what it is and what it does. If it's a tool or system, say what the tool does. If it's an attack, say how the attack works.
-
-**Why it matters**: 2-3 sentences on the real-world significance. Be specific — who is affected, what changes if this work is adopted or if attackers use it?
-
-**Limitations**: 1-2 sentences on what's missing or what the paper doesn't address."""
+Write 3-5 sentences explaining what this paper does and how, as if telling a colleague over coffee. Be direct and concrete. Don't use phrases like "the authors propose" or "this paper presents" — just say what it is and what it does. If it's a tool or system, say what the tool does. If it's an attack, say how the attack works."""
 
 # ── ArXiv fetching ────────────────────────────────────────────────────────────
 
